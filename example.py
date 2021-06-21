@@ -33,55 +33,57 @@ from hera_pspec import grouping
 import argparse
 
 ap = argparse.ArgumentParser(description="Calibration")
-ap.add_argument("flag_file", type=str, help="Flag File")
-ap.add_argument("data_file", type=str, help="Data File")
-ap.add_argument("model_fils", type=str, help="Model File")
+ap.add_argument("day", type=int, help="Day Number")
+ap.add_argument("chunk", type=int, help="Chunk Number")
+ap.add_argument('model_directory', type=str, help="Model Directory")
+ap.add_argument('data_directory', type=str, help="Data Directory")
 args = ap.parse_args()
-flag_files = args.flag_file
-data_files = args.data_file
-model_files = args.model_file
+day = args.day
+chunk = args.chunk
+model_directory = args.model_directory
+data_directory -= args.data_directory
 
-ntimes = []
-for flags in flag_files:
-    uvf = UVFlag(flags)
-    ntimes.append(uvf.Ntimes)
+
+uvf = UVFlag(flag_file)
+ntimes = (uvf.Ntimes)
 nflagstimes = np.min(ntimes)
-nfiles = []
-for day,flagfile in enumerate(flag_files):
-    if not os.path.exists(f"Day_{day}"):
-        os.mkdir(f"Day_{day}")
-    hdlst = io.HERAData(data_files)
-    lsts = np.unique(np.hstack(list(hdlst.lsts.values())))
-    dlst = np.mean(np.diff(lsts))
-    flags = UVFlag(flagfile)
-    flags.select(frequencies = flags.freq_array[(flags.freq_array>=115*1e+6) & (flags.freq_array<175*1e+6)])
-    flags.select(times=flags.time_array[(flags.lst_array>=lsts.min() - dlst/2) & (flags.lst_array<=lsts.max()+dlst/2)])
-    flags_chunks = [flags.flag_array.squeeze()[i*60:(i+1)*60] for i in range(nflagstimes//60)]
-    file_number=0
 
-    for datafile, modelfile, flags_chunk in tqdm.tqdm(zip(data_files, model_files, flags_chunks)):
-        hd_data = HERAData(datafile)
-        freqs = hd_data.freqs[(hd_data.freqs>=115*1e+6) & (hd_data.freqs<175*1e+6)]
-        data, flag, nsample = hd_data.read(polarizations=["nn"], frequencies=freqs)
-        for bl in data:
-            flag[bl] = flags_chunk
-        hd_data.update(flags=flag)
-        hd_data.write_uvh5(f"Day_{day}/data_{day}_{file_number}.uvh5", clobber=True)
-        del data, flag, nsample, hd_data
-        redcal.redcal_run(input_data=f"Day_{day}/data_{day}_{file_number}.uvh5", clobber=True, solar_horizon=90, verbose=True)
-        abscal.post_redcal_abscal_run(data_file=f"Day_{day}/data_{day}_{file_number}.uvh5", redcal_file=f"Day_{day}/data_{day}_{file_number}.omni.calfits", model_files=[f"Day_{day}/data_{day}_{file_number}.uvh5"], clobber=True, data_solar_horizon=90, model_solar_horizon=90)
-        file_number += 1
-    nfiles.append(file_number)
+data_file = sorted(glob.glob(f'{data_directory}/*.uvh5'))[chunk]
+model_file = sorted(glob.glob(f'{model_directory}/*.uvh5'))[chunk]
+flag_files = [f"H1C_Flags/{jd}.flags.h5" for jd in [2458098,2458099,2458101,2458102,2458103,2458104,2458105,2458106,
+                                                                                                        2458107,2458108,2458109,2458110,2458111,2458112,2458113,2458114,
+                                                                                                        2458115,2458116]]
+flag_file = flag_files[day]
+if not os.path.exists(f"Day_{day}"):
+    os.mkdir(f"Day_{day}")
+hdlst = io.HERAData(data_file)
+lsts = np.unique(np.hstack(list(hdlst.lsts.values())))
+dlst = np.mean(np.diff(lsts))
+flags = UVFlag(flag_file)
+flags.select(frequencies = flags.freq_array[(flags.freq_array>=115*1e+6) & (flags.freq_array<175*1e+6)])
+flags.select(times=flags.time_array[(flags.lst_array>=lsts.min() - dlst/2) & (flags.lst_array<=lsts.max()+dlst/2)])
 
-    cs=smooth_cal.CalibrationSmoother(calfits_list=sorted(glob.glob(f"Day_{day}/data_{day}_*.abs.calfits")))
-    cs.time_freq_2D_filter(time_scale=21600)
-    cs.write_smoothed_cal(clobber=True, output_replace=(".abs.",".smooth_abs."))
+hd_data = HERAData(data_file)
+freqs = hd_data.freqs[(hd_data.freqs>=115*1e+6) & (hd_data.freqs<175*1e+6)]
+data, flag, nsample = hd_data.read(polarizations=["nn"], frequencies=freqs)
+for bl in data:
+    flag[bl] = flags.flag_array.squeeze()
 
-    for file_number in tqdm.tqdm(range(nfiles[-1])):
-        apply_cal.apply_cal(data_infilename=f"Day{day}/data_{day}_{file_number}.uvh5", data_outfilename=f"Day{day}/data_{day}_{file_number}_smoothcal.uvh5", new_calibration=f"Day_{day}/data_{day}_{file_number}.smooth_abs.calfits", clobber=True)
+hd_data.update(flags=flag)
+hd_data.write_uvh5(f"Day_{day}/data_{day}_{chunk}.uvh5", clobber=True)
+del data, flag, nsample, hd_data
+redcal.redcal_run(input_data=f"Day_{day}/data_{day}_{chunk}.uvh5", clobber=True, solar_horizon=90, verbose=True)
+abscal.post_redcal_abscal_run(data_file=f"Day_{day}/data_{day}_{chunk}.uvh5", redcal_file=f"Day_{day}/data_{day}_{chunk}.omni.calfits", model_files=[f"Day_{day}/data_{day}_{chunk}.uvh5"], clobber=True, data_solar_horizon=90, model_solar_horizon=90)
 
-        vc = vis_clean.VisClean(f"Day_{day}/data_{day}_{file_number}_smoothcal.uvh5")
-        vc.read()
-        vc.vis_clean(standoff=100, min_dly=600, mode="dpss_leastsq", skip_if_flags_within_edge_distance=1, flag_model_rms_outliers=True, max_continguous_edge_flags=1)
-        vc.write_filtered_data(filled_outfilename=f"Day_{day}/data_{day}_{file_number}_filtered.uvh5", clobber=True)
-        os.remove(f"Day_{day}/data_{day}_{file_number}.uvh5")
+cs=smooth_cal.CalibrationSmoother(calfits_list=sorted(glob.glob(f"Day_{day}/data_{day}_*.abs.calfits")))
+cs.time_freq_2D_filter(time_scale=21600)
+cs.write_smoothed_cal(clobber=True, output_replace=(".abs.",".smooth_abs."))
+
+
+apply_cal.apply_cal(data_infilename=f"Day{day}/data_{day}_{chunk}.uvh5", data_outfilename=f"Day{day}/data_{day}_{chunk}_smoothcal.uvh5", new_calibration=f"Day_{day}/data_{day}_{chunk}.smooth_abs.calfits", clobber=True)
+
+vc = vis_clean.VisClean(f"Day_{day}/data_{day}_{chunk}_smoothcal.uvh5")
+vc.read()
+vc.vis_clean(standoff=100, min_dly=600, mode="dpss_leastsq", skip_if_flags_within_edge_distance=1, flag_model_rms_outliers=True, max_continguous_edge_flags=1)
+vc.write_filtered_data(filled_outfilename=f"Day_{day}/data_{day}_{chunk}_filtered.uvh5", clobber=True)
+os.remove(f"Day_{day}/data_{day}_{chunk}.uvh5")
