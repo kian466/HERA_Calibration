@@ -82,6 +82,6 @@ for day,flagfile in enumerate(flag_files):
 
         vc = vis_clean.VisClean(f"Day_{day}/data_{day}_{file_number}_smoothcal.uvh5")
         vc.read()
-        vc.vis_clean(standoff=100, min_dly=600, mode="dpss_leastsq", flag_model_rms_outliers=True, max_contiguous_edge_flags=1)
+        vc.vis_clean(standoff=100, min_dly=600, mode="dpss_leastsq", skip_if_flag_within_edge_distance=1, flag_model_rms_outliers=True, max_contiguous_edge_flags=1)
         vc.write_filtered_data(filled_outfilename=f"Day_{day}/data_{day}_{file_number}_filtered.uvh5", clobber=True)
         os.remove(f"Day_{day}/data_{day}_{file_number}.uvh5")
