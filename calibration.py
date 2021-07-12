@@ -1,5 +1,5 @@
 #!/lustre/aoc/projects/hera/kshahin/miniconda3/envs/hera3/bin/python
-
+import pdb
 import numpy as np
 import matplotlib.pyplot as plt
 import hera_cal.abscal as abscal
@@ -44,10 +44,10 @@ model_directory = args.model_directory
 data_directory = args.data_directory
 
 
-
+pdb.set_trace()
 data_file = sorted(glob.glob(f'{data_directory}/*.uvh5'))[chunk]
 model_file = sorted(glob.glob(f'{model_directory}/*.uvh5'))[chunk]
-flag_files = [f"H1C_Flags/{jd}.flags.h5" for jd in [2458098,2458099,2458101,2458102,2458103,2458104,2458105,2458106,
+flag_files = [f"/users/kshahin/HERA_Calibration/H1C_Flags/{jd}.flags.h5" for jd in [2458098,2458099,2458101,2458102,2458103,2458104,2458105,2458106,
                                                                                                         2458107,2458108,2458109,2458110,2458111,2458112,2458113,2458114,
                                                                                                         2458115,2458116]]
 flag_file = flag_files[day]
